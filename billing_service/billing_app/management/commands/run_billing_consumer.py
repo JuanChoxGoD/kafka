@@ -15,10 +15,18 @@ class Command(BaseCommand):
             enable_auto_commit=True,
             group_id='billing-service-group',
             value_deserializer=lambda m: json.loads(m.decode('utf-8')),
+            security_protocol='SASL_SSL',
+            sasl_mechanism='PLAIN',
+            sasl_plain_username=settings.KAFKA_API_KEY,
+            sasl_plain_password=settings.KAFKA_API_SECRET,
         )
         producer = KafkaProducer(
             bootstrap_servers=[settings.KAFKA_BOOTSTRAP_SERVERS],
             value_serializer=lambda v: json.dumps(v).encode('utf-8'),
+            security_protocol='SASL_SSL',
+            sasl_mechanism='PLAIN',
+            sasl_plain_username=settings.KAFKA_API_KEY,
+            sasl_plain_password=settings.KAFKA_API_SECRET,
         )
         print('Billing: listening to orders topic')
         for message in consumer:

@@ -16,6 +16,60 @@ Bases de datos:
 - `commercial_db`: compartida por `ordering_service` y `billing_service`
 - `logistics_db`: compartida por `shipping_service` e `inventory_service`
 
+## Despliegue en Nube
+
+### Configuración de Servicios Externos
+
+1. **Confluent Cloud Kafka**:
+   - Crear cluster en [confluent.cloud](https://confluent.cloud)
+   - Crear tópicos: `orders`, `payments`, `shipments`
+   - Generar API Key y Secret
+
+2. **PostgreSQL en Nube**:
+   - Usar RDS (AWS), Cloud SQL (GCP), Azure Database, etc.
+   - Crear 2 bases de datos: `commercial_db` y `logistics_db`
+
+3. **SendGrid para Emails**:
+   - Crear cuenta en [sendgrid.com](https://sendgrid.com)
+   - Generar API Key
+   - Verificar email remitente
+
+### Variables de Entorno
+
+Copiar `.env.example` a `.env` y configurar con valores reales:
+
+```bash
+cp .env.example .env
+```
+
+Variables requeridas:
+- `KAFKA_BOOTSTRAP_SERVERS`: URL del cluster Confluent
+- `KAFKA_API_KEY` y `KAFKA_API_SECRET`: Credenciales Confluent
+- `POSTGRES_HOST`, `POSTGRES_USER`, `POSTGRES_PASSWORD`: DB en nube
+- `SMTP_PASSWORD`: API Key de SendGrid
+- `EMAIL_FROM`: Email verificado en SendGrid
+
+### Desplegar
+
+```bash
+# Construir y ejecutar servicios
+docker-compose up --build
+
+# Ejecutar consumidores en background
+docker-compose exec billing_service python manage.py run_billing_consumer &
+docker-compose exec shipping_service python manage.py run_shipping_consumer &
+docker-compose exec inventory_service python manage.py run_inventory_consumer &
+docker-compose exec notification_service python manage.py run_notification_consumer &
+```
+
+## Desarrollo Local
+
+Para desarrollo local con Kafka local, descomentar las secciones `zookeeper` y `kafka` en `docker-compose.yml` y usar `KAFKA_BOOTSTRAP_SERVERS=kafka:9092`.
+
+```bash
+docker compose up --build
+```
+
 ## Productos disponibles
 - `101` - Camiseta Azul
 - `102` - Zapatos Running
@@ -36,18 +90,19 @@ POST `http://localhost:8001/api/orders/`
 }
 ```
 
-## Levantar el sistema
+## Flujo de Eventos
 
-Antes de ejecutar, configure las variables SMTP en el entorno o en `docker-compose.yml`:
-- `SMTP_HOST` (por ejemplo `smtp.gmail.com`)
-- `SMTP_PORT` (por ejemplo `587`)
-- `SMTP_USER`
-- `SMTP_PASSWORD`
-- `SMTP_USE_TLS` (`True` o `False`)
-- `EMAIL_FROM`
+1. Orden creada → `OrderCreated` en `orders`
+2. Stock reservado → `StockReserved` (consumido por shipping)
+3. Pago procesado → `PaymentProcessed` en `payments`
+4. Envío generado → `ShipmentCreated` en `shipments`
+5. Notificaciones por email para cada evento
 
-```bash
-docker compose up --build
+## Notas de Seguridad
+
+- Nunca commitear `.env` con secrets reales
+- Usar variables de entorno para toda configuración
+- Configurar VPCs y security groups en nube
 ```
 
 ## Comportamiento

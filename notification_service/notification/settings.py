@@ -33,3 +33,6 @@ EMAIL_USE_TLS = os.environ.get('SMTP_USE_TLS', 'True').lower() in ('true', '1', 
 EMAIL_USE_SSL = os.environ.get('SMTP_USE_SSL', 'False').lower() in ('true', '1', 'yes')
 DEFAULT_FROM_EMAIL = os.environ.get('EMAIL_FROM', 'storresp37@gmail.com')
 EMAIL_TIMEOUT = int(os.environ.get('EMAIL_TIMEOUT', '20'))
+KAFKA_BOOTSTRAP_SERVERS = os.environ.get('KAFKA_BOOTSTRAP_SERVERS')
+KAFKA_API_KEY = os.environ.get('KAFKA_API_KEY')
+KAFKA_API_SECRET = os.environ.get('KAFKA_API_SECRET')

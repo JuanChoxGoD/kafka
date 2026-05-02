@@ -17,6 +17,10 @@ class Command(BaseCommand):
             enable_auto_commit=True,
             group_id='notification-service-group',
             value_deserializer=lambda m: json.loads(m.decode('utf-8')),
+            security_protocol='SASL_SSL',
+            sasl_mechanism='PLAIN',
+            sasl_plain_username=settings.KAFKA_API_KEY,
+            sasl_plain_password=settings.KAFKA_API_SECRET,
         )
         print('Notification: listening to orders, payments, shipments topics')
         for message in consumer:

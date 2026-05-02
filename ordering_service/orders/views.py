@@ -41,6 +41,10 @@ class OrderCreateView(APIView):
         producer = KafkaProducer(
             bootstrap_servers=[settings.KAFKA_BOOTSTRAP_SERVERS],
             value_serializer=lambda v: json.dumps(v).encode('utf-8'),
+            security_protocol='SASL_SSL',
+            sasl_mechanism='PLAIN',
+            sasl_plain_username=settings.KAFKA_API_KEY,
+            sasl_plain_password=settings.KAFKA_API_SECRET,
         )
         producer.send('orders', value=event)
         producer.flush()

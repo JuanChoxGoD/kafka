@@ -24,3 +24,6 @@ DATABASES = {
         'PORT': os.environ.get('POSTGRES_PORT', '5432'),
     }
 }
+KAFKA_BOOTSTRAP_SERVERS = os.environ.get('KAFKA_BOOTSTRAP_SERVERS')
+KAFKA_API_KEY = os.environ.get('KAFKA_API_KEY')
+KAFKA_API_SECRET = os.environ.get('KAFKA_API_SECRET')
