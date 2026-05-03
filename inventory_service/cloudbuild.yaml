@@ -24,4 +24,4 @@ steps:
       - '--image=us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/inventory-service/inventory-service:$COMMIT_SHA'
       - '--region=us-central1'
       - '--set-cloudsql-instances=project-e15b8e8c-0432-43ea-ac0:us-central1:db-logistica'
-      - '--set-env-vars=POSTGRES_HOST=/cloudsql/project-e15b8e8c-0432-43ea-ac0:us-central1:db-logistica,POSTGRES_DB=logistics_db,POSTGRES_USER=postgres,POSTGRES_PASSWORD=TU_PASSWORD'
+      - '--set-env-vars=POSTGRES_HOST=/cloudsql/project-e15b8e8c-0432-43ea-ac0:us-central1:db-logistica,POSTGRES_DB=logistics_db,POSTGRES_USER=postgres,POSTGRES_PASSWORD=tuputamadre123'
