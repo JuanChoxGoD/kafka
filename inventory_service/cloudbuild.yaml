@@ -25,8 +25,7 @@ steps:
       - '--region=us-central1'
       - '--platform=managed'
       - '--set-cloudsql-instances=project-e15b8e8c-0432-43ea-ac0:us-central1:db-logistica'
-      - '--set-env-vars=POSTGRES_HOST=/cloudsql/project-e15b8e8c-0432-43ea-ac0:us-central1:db-logistica,POSTGRES_DB=logistics_db,POSTGRES_USER=postgres,POSTGRES_PASSWORD=tuputamadre123'
-      - '--allow-unauthenticated'
+      - '--set-env-vars=POSTGRES_HOST=/cloudsql/project-e15b8e8c-0432-43ea-ac0:us-central1:db-logistica,POSTGRES_DB=logistics_db,POSTGRES_USER=postgres,POSTGRES_PASSWORD=TU_PASSWORD'
 
 options:
   logging: CLOUD_LOGGING_ONLY
