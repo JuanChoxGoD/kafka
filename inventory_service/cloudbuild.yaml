@@ -4,14 +4,14 @@ steps:
     args:
       - 'build'
       - '-t'
-      - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/inventory-service/inventory-service:$COMMIT_SHA'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/kafka/inventory-service:$COMMIT_SHA'
       - './inventory_service'
 
   - name: 'gcr.io/cloud-builders/docker'
     id: Push
     args:
       - 'push'
-      - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/inventory-service/inventory-service:$COMMIT_SHA'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/kafka/inventory-service:$COMMIT_SHA'
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:slim'
     id: Deploy
@@ -21,9 +21,12 @@ steps:
       - 'services'
       - 'update'
       - 'inventory-service'
-      - '--image=us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/inventory-service/inventory-service:$COMMIT_SHA'
+      - '--image=us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/kafka/inventory-service:$COMMIT_SHA'
       - '--region=us-central1'
+      - '--platform=managed'
       - '--set-cloudsql-instances=project-e15b8e8c-0432-43ea-ac0:us-central1:db-logistica'
       - '--set-env-vars=POSTGRES_HOST=/cloudsql/project-e15b8e8c-0432-43ea-ac0:us-central1:db-logistica,POSTGRES_DB=logistics_db,POSTGRES_USER=postgres,POSTGRES_PASSWORD=tuputamadre123'
-  - options:
-    logging: CLOUD_LOGGING_ONLY
+      - '--allow-unauthenticated'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
