@@ -27,6 +27,7 @@ class Command(BaseCommand):
             sasl_mechanism='PLAIN',
             sasl_plain_username=settings.KAFKA_API_KEY,
             sasl_plain_password=settings.KAFKA_API_SECRET,
+            api_version=(2, 0, 0),
         )
         producer = KafkaProducer(
             bootstrap_servers=[settings.KAFKA_BOOTSTRAP_SERVERS],
@@ -35,6 +36,7 @@ class Command(BaseCommand):
             sasl_mechanism='PLAIN',
             sasl_plain_username=settings.KAFKA_API_KEY,
             sasl_plain_password=settings.KAFKA_API_SECRET,
+            api_version=(2, 0, 0),
         )
         print('Billing: listening to orders topic')
         for message in consumer:
