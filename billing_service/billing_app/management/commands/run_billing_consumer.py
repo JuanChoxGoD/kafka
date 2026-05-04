@@ -1,3 +1,4 @@
+import os
 import json
 import time
 import uuid
@@ -5,28 +6,36 @@ from kafka import KafkaConsumer, KafkaProducer
 from django.core.management.base import BaseCommand
 from django.conf import settings
 from billing_app.models import Payment, ProcessedEvent
+
 class Command(BaseCommand):
     help = 'Consume order events and publish payment events'
+
     def handle(self, *args, **options):
+        bootstrap_servers = settings.KAFKA_BOOTSTRAP_SERVERS or os.environ.get('KAFKA_BOOTSTRAP_SERVERS')
+        api_key = settings.KAFKA_API_KEY or os.environ.get('KAFKA_API_KEY')
+        api_secret = settings.KAFKA_API_SECRET or os.environ.get('KAFKA_API_SECRET')
+
+        print(f"Billing: connecting to {bootstrap_servers}")
+
         consumer = KafkaConsumer(
             'orders',
-            bootstrap_servers=[settings.KAFKA_BOOTSTRAP_SERVERS],
+            bootstrap_servers=[bootstrap_servers],
             auto_offset_reset='earliest',
             enable_auto_commit=True,
             group_id='billing-service-group',
             value_deserializer=lambda m: json.loads(m.decode('utf-8')),
             security_protocol='SASL_SSL',
             sasl_mechanism='PLAIN',
-            sasl_plain_username=settings.KAFKA_API_KEY,
-            sasl_plain_password=settings.KAFKA_API_SECRET,
+            sasl_plain_username=api_key,
+            sasl_plain_password=api_secret,
         )
         producer = KafkaProducer(
-            bootstrap_servers=[settings.KAFKA_BOOTSTRAP_SERVERS],
+            bootstrap_servers=[bootstrap_servers],
             value_serializer=lambda v: json.dumps(v).encode('utf-8'),
             security_protocol='SASL_SSL',
             sasl_mechanism='PLAIN',
-            sasl_plain_username=settings.KAFKA_API_KEY,
-            sasl_plain_password=settings.KAFKA_API_SECRET,
+            sasl_plain_username=api_key,
+            sasl_plain_password=api_secret,
         )
         print('Billing: listening to orders topic')
         for message in consumer:
