@@ -2,7 +2,7 @@ import os
 import json
 import time
 import uuid
-from kafka import KafkaConsumer, KafkaProducer
+from confluent_kafka import Consumer, KafkaException, Producer
 from django.core.management.base import BaseCommand
 from django.conf import settings
 from billing_app.models import Payment, ProcessedEvent
@@ -11,72 +11,115 @@ class Command(BaseCommand):
     help = 'Consume order events and publish payment events'
 
     def handle(self, *args, **options):
+        bootstrap_servers = settings.KAFKA_BOOTSTRAP_SERVERS or os.environ.get('KAFKA_BOOTSTRAP_SERVERS')
         api_key = settings.KAFKA_API_KEY or os.environ.get('KAFKA_API_KEY')
         api_secret = settings.KAFKA_API_SECRET or os.environ.get('KAFKA_API_SECRET')
 
-        print(f"Billing: connecting to {settings.KAFKA_BOOTSTRAP_SERVERS}")
+        print(f"Billing: connecting to {bootstrap_servers}")
 
-        consumer = KafkaConsumer(
-            'orders',
-            bootstrap_servers=[settings.KAFKA_BOOTSTRAP_SERVERS],
-            auto_offset_reset='earliest',
-            enable_auto_commit=True,
-            group_id='billing-service-group',
-            value_deserializer=lambda m: json.loads(m.decode('utf-8')),
-            security_protocol='SASL_SSL',
-            sasl_mechanism='PLAIN',
-            sasl_plain_username=settings.KAFKA_API_KEY,
-            sasl_plain_password=settings.KAFKA_API_SECRET,
-            api_version=(2, 0, 0),
-        )
-        producer = KafkaProducer(
-            bootstrap_servers=[settings.KAFKA_BOOTSTRAP_SERVERS],
-            value_serializer=lambda v: json.dumps(v).encode('utf-8'),
-            security_protocol='SASL_SSL',
-            sasl_mechanism='PLAIN',
-            sasl_plain_username=settings.KAFKA_API_KEY,
-            sasl_plain_password=settings.KAFKA_API_SECRET,
-            api_version=(2, 0, 0),
-        )
+        kafka_config = {
+            'bootstrap.servers': bootstrap_servers,
+            'security.protocol': 'SASL_SSL',
+            'sasl.mechanisms': 'PLAIN',
+            'sasl.username': api_key,
+            'sasl.password': api_secret,
+        }
+        consumer_config = {
+            **kafka_config,
+            'group.id': 'billing-service-group',
+            'auto.offset.reset': 'earliest',
+            'enable.auto.commit': True,
+        }
+
+        consumer = Consumer(consumer_config)
+        producer = Producer(kafka_config)
+        consumer.subscribe(['orders'])
+
         print('Billing: listening to orders topic')
-        for message in consumer:
-            event = message.value
-            print(
-                'Billing: read message from orders '
-                f'partition={message.partition} offset={message.offset} '
-                f'value={json.dumps(event)}',
-                flush=True,
-            )
-            event_id = event.get('event_id')
-            if not event_id or event.get('event_type') != 'OrderCreated':
-                continue
-            if ProcessedEvent.objects.filter(event_id=event_id).exists():
-                print(f'Billing: duplicate OrderCreated {event_id} ignored')
-                continue
-            payment_event_id = str(uuid.uuid4())
-            payment = Payment.objects.create(
-                order_id=event['order_id'],
-                amount=event['total_amount'],
-                status='PAID',
-                payment_method='card',
-                event_id=payment_event_id,
-            )
-            ProcessedEvent.objects.create(event_id=event_id)
-            payment_event = {
-                'event_id': payment_event_id,
-                'event_type': 'PaymentProcessed',
-                'order_id': payment.order_id,
-                'amount': float(payment.amount),
-                'status': payment.status,
-                'payment_method': payment.payment_method,
-            }
-            record_metadata = producer.send('payments', value=payment_event).get(timeout=10)
-            producer.flush()
-            print(
-                'Billing: published message to payments '
-                f'partition={record_metadata.partition} offset={record_metadata.offset} '
-                f'value={json.dumps(payment_event)}',
-                flush=True,
-            )
-            print(f"Billing: processed payment for order {payment.order_id}")
-            time.sleep(0.5)
+        try:
+            while True:
+                message = consumer.poll(1.0)
+                if message is None:
+                    continue
+                if message.error():
+                    print(f'Billing: consumer error from orders: {message.error()}', flush=True)
+                    continue
+
+                raw_value = message.value()
+                try:
+                    event = json.loads(raw_value.decode('utf-8'))
+                except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                    print(
+                        'Billing: invalid message from orders '
+                        f'partition={message.partition()} offset={message.offset()} error={exc}',
+                        flush=True,
+                    )
+                    continue
+
+                print(
+                    'Billing: read message from orders '
+                    f'partition={message.partition()} offset={message.offset()} '
+                    f'value={json.dumps(event)}',
+                    flush=True,
+                )
+                event_id = event.get('event_id')
+                if not event_id or event.get('event_type') != 'OrderCreated':
+                    continue
+                if ProcessedEvent.objects.filter(event_id=event_id).exists():
+                    print(f'Billing: duplicate OrderCreated {event_id} ignored')
+                    continue
+                payment_event_id = str(uuid.uuid4())
+                payment = Payment.objects.create(
+                    order_id=event['order_id'],
+                    amount=event['total_amount'],
+                    status='PAID',
+                    payment_method='card',
+                    event_id=payment_event_id,
+                )
+                ProcessedEvent.objects.create(event_id=event_id)
+                payment_event = {
+                    'event_id': payment_event_id,
+                    'event_type': 'PaymentProcessed',
+                    'order_id': payment.order_id,
+                    'amount': float(payment.amount),
+                    'status': payment.status,
+                    'payment_method': payment.payment_method,
+                }
+                payment_event_json = json.dumps(payment_event)
+                delivery_errors = []
+
+                def delivery_report(error, produced_message):
+                    if error is not None:
+                        delivery_errors.append(error)
+                        print(
+                            'Billing: failed to publish message to payments '
+                            f'error={error} value={payment_event_json}',
+                            flush=True,
+                        )
+                        return
+                    print(
+                        'Billing: published message to payments '
+                        f'partition={produced_message.partition()} '
+                        f'offset={produced_message.offset()} '
+                        f'value={payment_event_json}',
+                        flush=True,
+                    )
+
+                producer.produce(
+                    'payments',
+                    value=payment_event_json.encode('utf-8'),
+                    callback=delivery_report,
+                )
+                remaining_messages = producer.flush(10)
+                if remaining_messages:
+                    raise TimeoutError('Billing: timed out publishing message to payments')
+                if delivery_errors:
+                    raise KafkaException(delivery_errors[0])
+
+                print(f"Billing: processed payment for order {payment.order_id}")
+                time.sleep(0.5)
+        except KeyboardInterrupt:
+            print('Billing: consumer stopped', flush=True)
+        finally:
+            producer.flush(10)
+            consumer.close()
