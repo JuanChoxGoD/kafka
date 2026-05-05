@@ -16,5 +16,4 @@ class ProcessedEvent(models.Model):
     event_id = models.CharField(max_length=128, primary_key=True)
     created_at = models.DateTimeField(auto_now_add=True)
     class Meta:
-        db_table = 'processed_events'
-        managed = False
+        db_table = 'notification_processed_events'

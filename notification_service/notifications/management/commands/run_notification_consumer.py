@@ -9,12 +9,11 @@ from notifications.models import Order, ProcessedEvent
 
 class Command(BaseCommand):
     help = 'Consume all service events and notify users'
+    TOPICS = ['orders', 'payments', 'inventory', 'shipments']
 
     def handle(self, *args, **options):
         consumer = KafkaConsumer(
-            'orders',
-            'payments',
-            'shipments',
+            *self.TOPICS,
             bootstrap_servers=[settings.KAFKA_BOOTSTRAP_SERVERS],
             auto_offset_reset='earliest',
             enable_auto_commit=False,
@@ -35,7 +34,7 @@ class Command(BaseCommand):
         if not settings.EMAIL_HOST_PASSWORD:
             print('Notification: SMTP_PASSWORD is empty; SendGrid email delivery will fail', flush=True)
 
-        print('Notification: listening to orders, payments, shipments topics')
+        print(f'Notification: listening to {", ".join(self.TOPICS)} topics')
         for message in consumer:
             event = message.value
             print(
@@ -44,9 +43,9 @@ class Command(BaseCommand):
                 f'value={json.dumps(event)}',
                 flush=True,
             )
-            if message.topic == 'shipments':
+            if message.topic in ('inventory', 'shipments'):
                 print(
-                    'Notification: read message from shipments '
+                    f'Notification: read message from {message.topic} '
                     f'partition={message.partition} offset={message.offset} '
                     f'value={json.dumps(event)}',
                     flush=True,
@@ -94,6 +93,12 @@ class Command(BaseCommand):
             message = (
                 f"Se ha reservado stock para el producto {event.get('product_id')} "
                 f"(cantidad {event.get('quantity')})."
+            )
+        elif event_type == 'StockReservationFailed':
+            subject = f'Stock no disponible para orden {order_id}'
+            message = (
+                f"No fue posible reservar stock para el producto {event.get('product_id')} "
+                f"(cantidad {event.get('quantity')}). Motivo: {event.get('reason')}."
             )
         elif event_type == 'ShipmentCreated':
             subject = f'Envio generado para orden {order_id}'
