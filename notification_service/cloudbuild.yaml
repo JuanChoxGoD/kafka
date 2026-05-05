@@ -24,6 +24,7 @@ steps:
       - '--image=us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/kafka/notification-service:$COMMIT_SHA'
       - '--region=us-central1'
       - '--platform=managed'
+      - '--set-cloudsql-instances=project-e15b8e8c-0432-43ea-ac0:us-central1:db-comercial'
 
 options:
   logging: CLOUD_LOGGING_ONLY

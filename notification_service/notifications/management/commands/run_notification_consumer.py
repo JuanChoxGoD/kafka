@@ -2,7 +2,7 @@ import json
 import time
 from kafka import KafkaConsumer
 from django.conf import settings
-from django.core.mail import send_mail
+from django.core.mail import EmailMessage
 from django.core.management.base import BaseCommand
 from notifications.models import Order, ProcessedEvent
 
@@ -17,7 +17,7 @@ class Command(BaseCommand):
             'shipments',
             bootstrap_servers=[settings.KAFKA_BOOTSTRAP_SERVERS],
             auto_offset_reset='earliest',
-            enable_auto_commit=True,
+            enable_auto_commit=False,
             group_id='notification-service-group',
             value_deserializer=lambda m: json.loads(m.decode('utf-8')),
             security_protocol='SASL_SSL',
@@ -25,6 +25,16 @@ class Command(BaseCommand):
             sasl_plain_username=settings.KAFKA_API_KEY,
             sasl_plain_password=settings.KAFKA_API_SECRET,
         )
+        print(
+            'Notification: email config '
+            f'host={settings.EMAIL_HOST} port={settings.EMAIL_PORT} '
+            f'user={settings.EMAIL_HOST_USER} from={settings.DEFAULT_FROM_EMAIL} '
+            f'use_tls={settings.EMAIL_USE_TLS} password_configured={bool(settings.EMAIL_HOST_PASSWORD)}',
+            flush=True,
+        )
+        if not settings.EMAIL_HOST_PASSWORD:
+            print('Notification: SMTP_PASSWORD is empty; SendGrid email delivery will fail', flush=True)
+
         print('Notification: listening to orders, payments, shipments topics')
         for message in consumer:
             event = message.value
@@ -32,9 +42,11 @@ class Command(BaseCommand):
             if not event_id or ProcessedEvent.objects.filter(event_id=event_id).exists():
                 if event_id:
                     print(f'Notification: duplicate event {event_id} ignored')
+                consumer.commit()
                 continue
-            ProcessedEvent.objects.create(event_id=event_id)
-            self.notify(event)
+            if self.notify(event):
+                ProcessedEvent.objects.create(event_id=event_id)
+                consumer.commit()
             time.sleep(0.5)
 
     def get_customer_email(self, order_id, event):
@@ -52,7 +64,7 @@ class Command(BaseCommand):
         email = self.get_customer_email(order_id, event)
         if not email:
             print(f'Notification: no email found for order {order_id}, event {event.get("event_type")} skipped')
-            return
+            return True
 
         event_type = event.get('event_type')
         if event_type == 'OrderCreated':
@@ -78,13 +90,25 @@ class Command(BaseCommand):
             message = f"Se recibio el evento {event_type} para la orden {order_id}."
 
         try:
-            send_mail(
+            print(
+                'Notification: sending email '
+                f'to={email} from={settings.DEFAULT_FROM_EMAIL} '
+                f'event={event_type} order={order_id}',
+                flush=True,
+            )
+            email_message = EmailMessage(
                 subject,
                 message,
                 settings.DEFAULT_FROM_EMAIL,
                 [email],
-                fail_silently=False,
             )
+            email_message.send(fail_silently=False)
             print(f'Notification: email sent to {email} for event {event_type} order {order_id}')
+            return True
         except Exception as exc:
-            print(f'Notification: failed to send email to {email} for event {event_type}: {exc}')
+            print(
+                'Notification: failed to send email '
+                f'to={email} event={event_type} error_type={type(exc).__name__} error={exc!r}',
+                flush=True,
+            )
+            return False

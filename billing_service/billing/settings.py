@@ -14,13 +14,17 @@ MIDDLEWARE = [
 ROOT_URLCONF = 'billing.urls'
 TEMPLATES = []
 WSGI_APPLICATION = 'billing.wsgi.application'
+POSTGRES_HOST = os.environ.get('POSTGRES_HOST')
+if os.environ.get('K_SERVICE') and POSTGRES_HOST in (None, '', 'postgres'):
+    POSTGRES_HOST = '/cloudsql/project-e15b8e8c-0432-43ea-ac0:us-central1:db-comercial'
+POSTGRES_HOST = POSTGRES_HOST or 'postgres'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': os.environ.get('POSTGRES_DB', 'commercial_db'),
         'USER': os.environ.get('POSTGRES_USER', 'postgres'),
         'PASSWORD': os.environ.get('POSTGRES_PASSWORD', 'postgres'),
-        'HOST': os.environ.get('POSTGRES_HOST', 'postgres'),
+        'HOST': POSTGRES_HOST,
         'PORT': os.environ.get('POSTGRES_PORT', '5432'),
     }
 }
