@@ -41,6 +41,12 @@ class Command(BaseCommand):
         print('Billing: listening to orders topic')
         for message in consumer:
             event = message.value
+            print(
+                'Billing: read message from orders '
+                f'partition={message.partition} offset={message.offset} '
+                f'value={json.dumps(event)}',
+                flush=True,
+            )
             event_id = event.get('event_id')
             if not event_id or event.get('event_type') != 'OrderCreated':
                 continue
@@ -64,7 +70,13 @@ class Command(BaseCommand):
                 'status': payment.status,
                 'payment_method': payment.payment_method,
             }
-            producer.send('payments', value=payment_event)
+            record_metadata = producer.send('payments', value=payment_event).get(timeout=10)
             producer.flush()
+            print(
+                'Billing: published message to payments '
+                f'partition={record_metadata.partition} offset={record_metadata.offset} '
+                f'value={json.dumps(payment_event)}',
+                flush=True,
+            )
             print(f"Billing: processed payment for order {payment.order_id}")
             time.sleep(0.5)
