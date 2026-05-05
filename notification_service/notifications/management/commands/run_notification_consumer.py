@@ -38,6 +38,19 @@ class Command(BaseCommand):
         print('Notification: listening to orders, payments, shipments topics')
         for message in consumer:
             event = message.value
+            print(
+                'Notification: read message '
+                f'topic={message.topic} partition={message.partition} offset={message.offset} '
+                f'value={json.dumps(event)}',
+                flush=True,
+            )
+            if message.topic == 'shipments':
+                print(
+                    'Notification: read message from shipments '
+                    f'partition={message.partition} offset={message.offset} '
+                    f'value={json.dumps(event)}',
+                    flush=True,
+                )
             event_id = event.get('event_id')
             if not event_id or ProcessedEvent.objects.filter(event_id=event_id).exists():
                 if event_id:
@@ -91,9 +104,9 @@ class Command(BaseCommand):
 
         try:
             print(
-                'Notification: sending email '
+                'Notification: attempting to send email '
                 f'to={email} from={settings.DEFAULT_FROM_EMAIL} '
-                f'event={event_type} order={order_id}',
+                f'event={event_type} order={order_id} subject={subject}',
                 flush=True,
             )
             email_message = EmailMessage(
@@ -102,8 +115,14 @@ class Command(BaseCommand):
                 settings.DEFAULT_FROM_EMAIL,
                 [email],
             )
-            email_message.send(fail_silently=False)
-            print(f'Notification: email sent to {email} for event {event_type} order {order_id}')
+            sent_count = email_message.send(fail_silently=False)
+            print(
+                'Notification: email send finished '
+                f'to={email} event={event_type} order={order_id} sent_count={sent_count}',
+                flush=True,
+            )
+            if sent_count != 1:
+                return False
             return True
         except Exception as exc:
             print(
