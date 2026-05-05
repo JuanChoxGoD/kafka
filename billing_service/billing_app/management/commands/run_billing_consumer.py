@@ -2,13 +2,20 @@ import os
 import json
 import time
 import uuid
-from confluent_kafka import Consumer, KafkaException, Producer
+from confluent_kafka import Consumer, KafkaException, Producer, TopicPartition
 from django.core.management.base import BaseCommand
 from django.conf import settings
 from billing_app.models import Payment, ProcessedEvent
 
 class Command(BaseCommand):
     help = 'Consume order events and publish payment events'
+
+    def get_latest_offset(self, consumer, message):
+        _, high_offset = consumer.get_watermark_offsets(
+            TopicPartition(message.topic(), message.partition()),
+            timeout=10,
+        )
+        return high_offset - 1
 
     def handle(self, *args, **options):
         bootstrap_servers = settings.KAFKA_BOOTSTRAP_SERVERS or os.environ.get('KAFKA_BOOTSTRAP_SERVERS')
@@ -28,7 +35,7 @@ class Command(BaseCommand):
             **kafka_config,
             'group.id': 'billing-service-group',
             'auto.offset.reset': 'earliest',
-            'enable.auto.commit': True,
+            'enable.auto.commit': False,
         }
 
         consumer = Consumer(consumer_config)
@@ -54,6 +61,7 @@ class Command(BaseCommand):
                         f'partition={message.partition()} offset={message.offset()} error={exc}',
                         flush=True,
                     )
+                    consumer.commit(message=message, asynchronous=False)
                     continue
 
                 print(
@@ -62,23 +70,37 @@ class Command(BaseCommand):
                     f'value={json.dumps(event)}',
                     flush=True,
                 )
+                latest_offset = self.get_latest_offset(consumer, message)
+                if message.offset() < latest_offset:
+                    print(
+                        'Billing: read orders message is not the latest '
+                        f'partition={message.partition()} offset={message.offset()} '
+                        f'latest_offset={latest_offset}; waiting for latest message',
+                        flush=True,
+                    )
+                    consumer.commit(message=message, asynchronous=False)
+                    continue
+
                 event_id = event.get('event_id')
                 if not event_id or event.get('event_type') != 'OrderCreated':
+                    consumer.commit(message=message, asynchronous=False)
                     continue
                 if ProcessedEvent.objects.filter(event_id=event_id).exists():
                     print(f'Billing: duplicate OrderCreated {event_id} ignored')
+                    consumer.commit(message=message, asynchronous=False)
                     continue
                 payment_event_id = str(uuid.uuid4())
-                payment = Payment.objects.create(
+                payment, _ = Payment.objects.get_or_create(
                     order_id=event['order_id'],
-                    amount=event['total_amount'],
-                    status='PAID',
-                    payment_method='card',
-                    event_id=payment_event_id,
+                    defaults={
+                        'amount': event['total_amount'],
+                        'status': 'PAID',
+                        'payment_method': 'card',
+                        'event_id': payment_event_id,
+                    },
                 )
-                ProcessedEvent.objects.create(event_id=event_id)
                 payment_event = {
-                    'event_id': payment_event_id,
+                    'event_id': payment.event_id,
                     'event_type': 'PaymentProcessed',
                     'order_id': payment.order_id,
                     'amount': float(payment.amount),
@@ -116,6 +138,8 @@ class Command(BaseCommand):
                 if delivery_errors:
                     raise KafkaException(delivery_errors[0])
 
+                ProcessedEvent.objects.get_or_create(event_id=event_id)
+                consumer.commit(message=message, asynchronous=False)
                 print(f"Billing: processed payment for order {payment.order_id}")
                 time.sleep(0.5)
         except KeyboardInterrupt:
