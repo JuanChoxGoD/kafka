@@ -1,4 +1,3 @@
-import os
 import json
 import time
 import uuid
@@ -18,18 +17,14 @@ class Command(BaseCommand):
         return high_offset - 1
 
     def handle(self, *args, **options):
-        bootstrap_servers = settings.KAFKA_BOOTSTRAP_SERVERS or os.environ.get('KAFKA_BOOTSTRAP_SERVERS')
-        api_key = settings.KAFKA_API_KEY or os.environ.get('KAFKA_API_KEY')
-        api_secret = settings.KAFKA_API_SECRET or os.environ.get('KAFKA_API_SECRET')
-
-        print(f"Billing: connecting to {bootstrap_servers}")
+        print(f"Billing: connecting to {settings.KAFKA_BOOTSTRAP_SERVERS}")
 
         kafka_config = {
-            'bootstrap.servers': bootstrap_servers,
+            'bootstrap.servers': settings.KAFKA_BOOTSTRAP_SERVERS,
             'security.protocol': 'SASL_SSL',
             'sasl.mechanisms': 'PLAIN',
-            'sasl.username': api_key,
-            'sasl.password': api_secret,
+            'sasl.username': settings.KAFKA_API_KEY,
+            'sasl.password': settings.KAFKA_API_SECRET,
         }
         consumer_config = {
             **kafka_config,
@@ -81,6 +76,13 @@ class Command(BaseCommand):
                     consumer.commit(message=message, asynchronous=False)
                     continue
 
+                print(
+                    'Billing: successfully read latest message from orders '
+                    f'partition={message.partition()} offset={message.offset()} '
+                    f'value={json.dumps(event)}',
+                    flush=True,
+                )
+
                 event_id = event.get('event_id')
                 if not event_id or event.get('event_type') != 'OrderCreated':
                     consumer.commit(message=message, asynchronous=False)
@@ -120,7 +122,7 @@ class Command(BaseCommand):
                         )
                         return
                     print(
-                        'Billing: published message to payments '
+                        'Billing: successfully published message to payments '
                         f'partition={produced_message.partition()} '
                         f'offset={produced_message.offset()} '
                         f'value={payment_event_json}',
