@@ -105,9 +105,12 @@ class Command(BaseCommand):
                     'event_id': payment.event_id,
                     'event_type': 'PaymentProcessed',
                     'order_id': payment.order_id,
+                    'product_id': event['product_id'],
+                    'quantity': event['quantity'],
                     'amount': float(payment.amount),
                     'status': payment.status,
                     'payment_method': payment.payment_method,
+                    'customer_email': event.get('customer_email'),
                 }
                 payment_event_json = json.dumps(payment_event)
                 delivery_errors = []

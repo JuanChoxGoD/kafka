@@ -1,4 +1,4 @@
 Django>=4.2,<5
-kafka-python
+confluent-kafka
 psycopg2-binary
 gunicorn
